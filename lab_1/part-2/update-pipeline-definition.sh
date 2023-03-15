@@ -1,7 +1,14 @@
 #!/bin/bash
 
-jsonFilePath='../pipeline.json'
+jsonFilePath=$1
 outputFile=pipeline-$(date "+%Y.%m.%d-%H.%M.%S").json;
+
+# Exit the app if source file is not exists in given path
+if [ ! -f $jsonFilePath ]
+then
+    echo "File does not exist"
+    exit 1
+fi
 
 checkJQ() {
   # jq test
@@ -31,7 +38,7 @@ checkJQ
 # The metadata property is removed               The value of the pipeline’s version property is incremented by 1
 echo $(cat $jsonFilePath | jq  'del(.metadata)') |  jq  '.pipeline.version=.pipeline.version+1' | jq '.' > $outputFile
 
-declare -A args
+declare args
 while [[ "$#" > "0" ]]; do
   case "$1" in 
     (--*=*)
@@ -48,11 +55,8 @@ while [[ "$#" > "0" ]]; do
             jq --arg pollForSourceChanges "$val" '.pipeline.stages[0].actions[0].configuration.PollForSourceChanges = $pollForSourceChanges' "$outputFile" > tmp.$$.json && mv tmp.$$.json "$outputFile"
         elif [[ ${key} == 'configuration' ]] 
         then
-            echo "configuration update is ${val}"
+            jq --arg configuration "$val" '(.pipeline.stages[]  | .actions[] | .configuration? | .EnvironmentVariables? | select(. != null) |select(test("{{BUILD_CONFIGURATION value}}"))) |= sub("{{BUILD_CONFIGURATION value}}"; "'"$val"'") ' "$outputFile" > tmp.$$.json && mv tmp.$$.json "$outputFile"
       fi
   esac
   shift
 done
-
-echo "args : $args"
-for key in "${!args[@]}"; do echo "$key => ${args[$key]}"; done
